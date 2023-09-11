@@ -56,12 +56,12 @@ static int32_t line_height = 20;
 
 static void appenditem(Item *item, Item **list, Item **last);
 static char *fstrstr(const char *s, const char *sub);
-static void insert(const char *s, ssize_t n);
-static void match(void);
+static void insert(const char *s, ssize_t n, struct dmenu_panel* panel);
+static void match(struct dmenu_panel* panel);
 static size_t nextrune(int incr);
 static void readstdin(void);
 static void alarmhandler(int signum);
-/* static void handle_return(char* value); */
+static void handle_return(char* value, struct dmenu_panel* panel);
 static void usage(void);
 static int retcode = EXIT_SUCCESS;
 static int selected_monitor = 0;
@@ -86,9 +86,10 @@ static Item *prev, *curr, *next;
 static Item *leftmost, *rightmost;
 static char *font = "Mono";
 
+
 static int (*fstrncmp)(const char *, const char *, size_t) = strncmp;
 
-void insert(const char *s, ssize_t n) {
+void insert(const char *s, ssize_t n, struct dmenu_panel* panel) {
 	if(strlen(text) + n > sizeof text - 1) {
 		return;
 	}
@@ -100,7 +101,7 @@ void insert(const char *s, ssize_t n) {
 	}
 
 	cursor += n;
-	match();
+	match(panel);
 }
 
 void keyrepeat(struct dmenu_panel *panel) {
@@ -150,9 +151,7 @@ void keypress(struct dmenu_panel *panel, enum wl_keyboard_key_state state,
 	switch (sym) {
 	case XKB_KEY_KP_Enter: /* fallthrough */
 	case XKB_KEY_Return:
-		dmenu_close(panel);
-		fputs((sel && !shft) ? sel->text : text, stdout);
-		fflush(stdout);
+		handle_return((sel && !shft) ? sel->text : text, panel);
 		break;
 
 	case XKB_KEY_Escape:
@@ -196,7 +195,7 @@ void keypress(struct dmenu_panel *panel, enum wl_keyboard_key_state state,
 
 	case XKB_KEY_BackSpace:
 		if (cursor > 0)
-			insert(NULL, nextrune(-1) - cursor);
+			insert(NULL, nextrune(-1) - cursor, panel);
 		break;
 
 	case XKB_KEY_Delete:
@@ -209,12 +208,12 @@ void keypress(struct dmenu_panel *panel, enum wl_keyboard_key_state state,
 		if(!sel) return;
 		strncpy(text, sel->text, sizeof text);
 		cursor = strlen(text);
-		match();
+		match(panel);
 		break;
 
 	default:
 		if (xkb_keysym_to_utf8(sym, buf, 8)) {
-			insert(buf, strnlen(buf, 8));
+			insert(buf, strnlen(buf, 8), panel);
 		}
 	}
 
@@ -457,31 +456,31 @@ int main(int argc, char **argv) {
 	    panel_height *= lines + 1;
 	}
 
-	struct dmenu_panel dmenu;
-	dmenu.selected_monitor = selected_monitor;
-	dmenu.selected_monitor_name = selected_monitor_name;
-	dmenu_init_panel(&dmenu, panel_height, show_in_bottom);
+	struct dmenu_panel panel;
+	panel.selected_monitor = selected_monitor;
+	panel.selected_monitor_name = selected_monitor_name;
+	dmenu_init_panel(&panel, panel_height, show_in_bottom);
 
-	dmenu.on_keyevent = keypress;
-	dmenu.on_keyrepeat = keyrepeat;
-	dmenu.draw = draw;
+	panel.on_keyevent = keypress;
+	panel.on_keyrepeat = keyrepeat;
+	panel.draw = draw;
 
-	match();
+	match(&panel);
 
-	struct monitor_info *monitor = dmenu.monitor;
+	struct monitor_info *monitor = panel.monitor;
 	double factor = monitor->scale / ((double)monitor->physical_width / monitor->logical_width);
 
-	window_config.height = round_to_int(dmenu.height / ((double)monitor->physical_width
+	window_config.height = round_to_int(panel.height / ((double)monitor->physical_width
 												  / monitor->logical_width));
 	window_config.height *= monitor->scale;
 	window_config.width = round_to_int(monitor->physical_width * factor);
 
-	get_text_size(dmenu.surface.cairo, font, NULL, &window_config.text_height,
+	get_text_size(panel.surface.cairo, font, NULL, &window_config.text_height,
 				  NULL, monitor->scale, false, "Aj");
 
 	window_config.text_y = (window_config.height / 2.0) - (window_config.text_height / 2.0);
 
-	dmenu_show(&dmenu);
+	dmenu_show(&panel);
 	return retcode;
 }
 
@@ -509,7 +508,8 @@ char * fstrstr(const char *s, const char *sub) {
 	return NULL;
 }
 
-void match(void) {
+// TODO: find a better way than passing the panel for early return
+void match(struct dmenu_panel* panel) {
 	size_t len;
 	Item *item, *itemend, *lexact, *lprefix, *lsubstr, *exactend, *prefixend, *substrend;
 
@@ -556,7 +556,8 @@ void match(void) {
 	leftmost = matches;
 
     if(returnearly && !curr->right) {
-        /* handle_return(curr->text); */
+		printf("dieter\n");
+        handle_return(curr->text, panel);
     }
 }
 
@@ -592,6 +593,12 @@ void readstdin(void) {
 
 		item->next = item->left = item->right = NULL;
 	}
+}
+
+void handle_return(char* value, struct dmenu_panel* panel) {
+	dmenu_close(panel);
+	fputs(value, stdout);
+	fflush(stdout);
 }
 
 

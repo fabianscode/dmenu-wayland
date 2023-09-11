@@ -5,7 +5,6 @@ dmenu-wl is an efficient dynamic menu for wayland (wlroots).
 Missing dmenu (for X) features:
 - Echo (non-interactive use)
 - Handling pagination
-- Return-early
 - Control-Enter handling
 - Keyrepeat
 - Choice (-c) -mode
